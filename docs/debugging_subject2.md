@@ -119,3 +119,111 @@ And then:
 Main Change:
 
 > gap_lambda is now a first-class parameter logged in every result row, so when we compare across runs the dataframe is "self-documenting."
+
+## Using LOOCV across trials together?
+
+From a neuroscientific perspective...
+
+SSVEP signals drift between sessions, due to:
+
+- electrode impedance,
+- cap repositioning,
+- fatigue
+- attention fluctuations
+
+In a nutshell...
+
+> If pool sessions and run LOOCV across all trials together, we'd training on trials from both sessions and testing on held-out trials from both sessions, so the model sees the session-2 distribution during training when it should be blind to it.
+
+Also:
+
+> In a real BCI deployment you calibrate on one session and deploy on the next (or on a new day). The leave-one-session-out protocol directly simulates that.
+
+## Questions and more questions...
+
+The poor PSD performance on Subject 2 is more likely a signal quality or feature issue than a data-quantity issue.
+
+### Sus 1: _Are the PSD features being computed on the right channels?_
+
+Yes, they are.
+
+### Sus 2: _SNR features not strict enough_
+
+Worth tightening that window or switching to a proper SSVEP SNR metric (signal bin / mean of neighboring bins excluding harmonics).
+
+### Sus 3: _sliding windows_
+
+Trying shorter windows with the sliding window approach might actually help PSD more than CCA, since PSD benefits from averaging multiple segments.
+
+## Hands on analysis
+
+Analyzed error graphs initially provided by the database.
+
+![Subject 1](/data/raw/ssvep/subject_1_fvep_led_training_1_result2d.PNG)
+
+Subject 1: _clean_
+
+- Error drops sharply in the first few trials.
+- Stabilizes at near-zero error
+- All 4 classes converge to clean, flat near-perfect lines
+- Explains the 95–100% accuracy in the notebook.
+
+![Subject 2](/data/raw/ssvep/subject_2_fvep_led_training_1_result2d.PNG)
+Subject 2 (left) — the problem case:
+
+- Error curves start HIGH, and gradually flatten out but never drop below 5 - 20%
+- The curves show much slower learning
+- All 4 classes plateau at a noisy, elevated error floor
+
+> This matches exactly what we in the notebook: PSD at 45–60%, and even CCA is weaker than Subject 1
+
+### Computing SNR to find a correlation
+
+Added chunks to Mariami's initial script (everything after last TO DO's).
+![](/docs/images/snr_validation.png)
+
+### Left panel: SNR vs cross-session success
+
+Subject 2 has:
+
+- Low SNR (x-axis ~0.5–2)
+- Low cross-session accuracy (y-axis ~0–20%)
+
+Subject 1:
+Dots are scattered across the middle-upper region with much higher SNR and accuracy.
+
+    The correlation is crystal clear: low SNR = bad generalization.
+
+Middle panel: SNR vs PSD feature strength
+
+There's a linear relationship:
+
+     — higher SNR → stronger PSD features.
+
+Subject 2's orange dots are bunched at low SNR, so the PSD classifier has weak discriminative features to work with.
+
+This **could be a signal problem.**
+
+Right panel: SNR vs CCA target score
+
+- CCA is less dependent on SNR (see the shallower trend line),
+  which explains why CCA works better on Subject 2 than PSD.
+
+- CCA uses template matching across the entire EEG space.
+  - it just looks for correlations with sine/cosine references.
+  - PSD only cares about relative power at target vs. neighboring bins, so it dies when SNR is low.
+
+## Pseudo Conclusions
+
+Subject 2's weak performance might not be a bug.
+
+Possible reasons/questions:
+
+1. The BCI literature calls these "BCI-illiterate" subjects (~10–20% of population for SSVEP).
+
+2. Can we pre-select trials deliberately?
+   If bin Subject 2's 20 trials by SNR and train on only the top-50%, does accuracy jump?
+
+3. Real time discrimination:
+
+   Since CCA is more SNR-robust than PSD, maybe the recommendation is: use CCA for real-time BCIs where signal quality is variable, reserve PSD for high-SNR subjects only.
