@@ -54,3 +54,15 @@ FBCCA `cv_gap = 0` which validates the approach, literally zero overfitting sign
      what's HPO?
 
 PSD weakness is now contextualized: **Subject 2's sudden increasy in acc when using FBCCA**
+
+# Neuroscientific Lense
+
+## Neural Resonance Harmonics...
+
+When a person fixates on a flickering stimulus, the visual cortex (specifically the occipital electrodes like Oz, O1, O2, and POz) resonates at that specific frequency.
+
+> **_The brain doesn't just react to the fundamental frequency, but also prodecues harmonics_**
+
+     Harmonics:  integer multiples of that frequency.
+
+## SNR (Signal-to-Noise Ratio) Optimization.
