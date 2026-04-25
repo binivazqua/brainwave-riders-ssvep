@@ -1,0 +1,716 @@
+
+"""
+Dataset: subjects 1 and 2, with two EEG recording sessions per subject.
+
+A trial is one EEG segment cut after a trigger onset.
+The first 0.5 s are skipped, then a 6.85 s window is used.
+Each trial has one label: the stimulus frequency, 9, 10, 12, or 15 Hz.
+
+Processing pipeline:
+    band-pass filtering from 8 to 50 Hz,
+    CCA feature extraction
+    feature scaling
+    LDA classification
+
+CCA features:
+    for each trial, EEG is compared with sine/cosine reference signals for all target frequencies and harmonic settings.
+    This gives 4 frequencies * 5 harmonic settings = 20 features per trial.
+
+FBCCA features:
+    for each trial, EEG is compared with sine/cosine reference signals for all target frequencies across several sub-bands.
+    The sub-band CCA scores are weighted and combined.
+    This gives 4 frequencies = 4 features per trial.
+
+Validation:
+    before training, the last 5 trials from each subject-session group are held out and are never used for fitting.
+
+Evaluation:
+    leave-one-session-out is used on the remaining trials.
+    Split I trains on session II and tests on session I.
+    Split II trains on session I and tests on session II.
+    This checks whether the model generalizes across recording sessions.
+
+Metrics:
+    accuracy
+    balanced accuracy
+    macro F1-score
+    confusion matrix
+    train-test accuracy gap.
+
+Comparison:
+    Current results are compared with stored 2024 baseline results for CCA, FBCCA, and LDA.
+"""
+import matplotlib
+ 
+print(matplotlib.get_backend())
+
+import os
+import shutil
+import urllib.request
+import zipfile
+from pathlib import Path
+
+import h5py
+import matplotlib.pyplot as plt
+import numpy as np
+from numpy.linalg import svd
+from scipy.signal import butter, sosfiltfilt
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score, confusion_matrix
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+
+DATA_DIR = "BR41N_IO_SSVEP_dataset"
+
+FS = 256
+FREQS = [9, 10, 12, 15]
+SUBJECTS = [1, 2]
+SESSIONS = [1, 2]
+
+# Skip first 0.5 s after trigger onset
+PRE_SEC = 0.5
+
+# Use 6.85 s of EEG signal for each trial
+WIN_SEC = 6.85
+
+BAND_LO = 8.0
+BAND_HI = 50.0
+CCA_HARMONICS = [1, 2, 3, 4, 5]
+
+# Trials held out per (subject, session) group — never seen during training
+VAL_PER_SESSION = 5
+
+
+def get_data(path):
+    path = Path(path)
+    if path.exists(): return path
+
+    urllib.request.urlretrieve(
+        "https://github.com/michaela10c/ssvep_data_analysis/archive/refs/heads/main.zip",
+        "repo.zip"
+    )
+
+    with zipfile.ZipFile("repo.zip") as z:
+        z.extractall("tmp")
+
+    path.mkdir()
+    for f in next(Path("tmp").iterdir()).iterdir():
+        if f.suffix.lower() in [".mat"] or f.name in ["classInfo_4_5.m"]:
+            shutil.copy(f, path / f.name)
+
+    shutil.rmtree("tmp")
+    Path("repo.zip").unlink()
+    return path
+
+
+get_data(DATA_DIR)
+
+
+def load_dataset():
+    """
+    Loads the BR41N.IO SSVEP dataset and cuts it into trials.
+
+    Dataset layout:
+    - 2 subjects
+    - 2 sessions per subject
+    - 20 trials per session
+    - 8 EEG channels
+    - 4 stimulus classes: 9, 10, 12, 15 Hz
+
+    Each .mat file contains a matrix named "y":
+        column 0      - not used
+        columns 1..8  - EEG channels
+        column 9      - trigger signal
+        column 10     - internal LDA classification output, not used
+
+    The labels are stored in classInfo_4_5.m as one-hot vectors:
+        trial 1: 1 0 0 0 -> 9 Hz
+        trial 2: 0 1 0 0 -> 10 Hz
+        trial 3: 0 0 1 0 -> 12 Hz
+        trial 4: 0 0 0 1 -> 15 Hz
+    """
+
+    # Load one-hot labels and convert them directly to class indices: 0, 1, 2, 3.
+    label_file = os.path.join(DATA_DIR, "classInfo_4_5.m")
+    with open(label_file, "r") as f:
+        stim_labels = [
+            [int(x) for x in line.split()].index(1)
+            for line in f
+            if line.strip()
+        ]
+
+    trials_per_session = len(stim_labels)
+    print("trials_per_session:", trials_per_session)
+
+    eeg_columns = slice(1, 9)
+    trigger_column = 9
+
+    pre_samples = int(PRE_SEC * FS)
+    window_samples = int(WIN_SEC * FS)
+
+    trials = []
+    labels = []
+    meta = []
+
+    for subject in SUBJECTS:
+        for session in SESSIONS:
+            file_path = os.path.join(
+                DATA_DIR,
+                f"subject_{subject}_fvep_led_training_{session}.mat"
+            )
+
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"EEG file not found: {file_path}")
+
+            with h5py.File(file_path, "r") as f:
+                data = f["y"][:]
+
+            # EEG transposed to shape: channels × samples
+            eeg = data[:, eeg_columns].T
+            trigger = data[:, trigger_column]
+
+            # Trial starts when trigger changes from OFF to ON.
+            trigger_on = trigger > 0
+            trial_starts = np.where(np.diff(trigger_on.astype(int)) == 1)[0] + 1
+
+            for trial_id, trigger_start in enumerate(trial_starts[:trials_per_session]):
+                start = trigger_start + pre_samples
+                end = start + window_samples
+
+                trial = eeg[:, start:end]
+
+                # Skip incomplete trials at the end of the recording.
+                if trial.shape[1] != window_samples:
+                    continue
+
+                trials.append(trial)
+                labels.append(stim_labels[trial_id])
+                meta.append((subject, session, trial_id + 1))
+
+    return np.array(trials), np.array(labels), meta
+
+
+def bandpass_filter(trial):
+    """Butterworth bandpass filter, 4th order, zero-phase."""
+    nyquist = FS / 2.0
+    sos = butter(4, [BAND_LO / nyquist, BAND_HI / nyquist], btype="band", output="sos")
+    return sosfiltfilt(sos, trial, axis=-1)
+
+
+def preprocess(trials):
+    """Applies band-pass filtering to every trial."""
+    return np.array([bandpass_filter(trial) for trial in trials])
+
+
+def make_ref(freq, n_samples, n_harmonics):
+    """
+    Creates sin/cos reference signals for one target frequency.
+
+    Example: freq = 10 Hz  n_harmonics = 3
+    References are built for:  10 Hz, 20 Hz, 30 Hz
+    """
+    time = np.arange(n_samples) / FS
+    components = []
+
+    for harmonic in range(1, n_harmonics + 1):
+        harmonic_freq = harmonic * freq
+        components.append(np.sin(2 * np.pi * harmonic_freq * time))
+        components.append(np.cos(2 * np.pi * harmonic_freq * time))
+
+    return np.stack(components, axis=1)
+
+
+def cca_score(eeg, ref):
+    """
+    Computes one CCA (Canonical Correlation Analysis) score between EEG and reference waves.
+
+    It checks whether some combination of EEG channels is similar to some
+    combination of sine/cosine reference waves.
+
+    Uses SVD decomposition for numerically stable canonical correlation.
+    Only mean-centers the signals (no per-column scaling) so that the
+    correlation values are comparable across different reference frequencies.
+    """
+    x = eeg - eeg.mean(axis=0, keepdims=True)
+    y = ref - ref.mean(axis=0, keepdims=True)
+
+    ux, sx, _ = svd(x, full_matrices=False)
+    uy, sy, _ = svd(y, full_matrices=False)
+
+    # Discard near-zero singular values to handle rank-deficient matrices.
+    tol_x = max(x.shape) * np.finfo(float).eps * sx[0]
+    tol_y = max(y.shape) * np.finfo(float).eps * sy[0]
+    rank_x = int(np.sum(sx > tol_x))
+    rank_y = int(np.sum(sy > tol_y))
+
+    if rank_x == 0 or rank_y == 0:
+        return 0.0
+
+    # The largest canonical correlation is the largest singular value of Qx.T @ Qy.
+    qx = ux[:, :rank_x]
+    qy = uy[:, :rank_y]
+    corr = svd(qx.T @ qy, compute_uv=False)
+    return float(np.clip(corr[0], 0.0, 1.0)) if corr.size else 0.0
+
+
+def extract_features_cca(trials):
+    """
+    Converts each trial into CCA features.
+    Example: 4 frequencies × 5 harmonic settings = 20 features.
+    """
+    features = []
+
+    for trial in trials:
+        n_samples = trial.shape[1]
+        eeg = trial.T
+        feat_vec = [
+            cca_score(eeg, make_ref(freq, n_samples, n_h))
+            for n_h in CCA_HARMONICS
+            for freq in FREQS
+        ]
+        features.append(feat_vec)
+
+    return np.array(features)
+
+
+def extract_features_fbcca(trials):
+    """
+    4 FBCCA scores, one per target frequency.
+
+    Subbands: equal-width slices of the passband, each BAND_LO Hz wide.
+    Weights: 1/(k+1) — lower subbands (fundamental harmonics) weighted more heavily.
+    Tested against uniform and Chen et al. (2015) formula; all three give equal accuracy.
+    """
+    _step = BAND_LO
+    _n = int((BAND_HI - BAND_LO) // _step)
+    subbands = [(BAND_LO + k * _step, BAND_LO + (k + 1) * _step) for k in range(_n)]
+    weights = [1 / (k + 1) for k in range(_n)]
+
+    features = []
+    for trial in trials:
+        n_samples = trial.shape[1]
+        refs = [make_ref(freq, n_samples, 5) for freq in FREQS]
+        score = np.zeros(len(FREQS))
+        for k, (lo, hi) in enumerate(subbands):
+            sos = butter(4, [lo / (FS / 2), hi / (FS / 2)], btype="band", output="sos")
+            filt = sosfiltfilt(sos, trial, axis=-1).T  # (n_samp, n_ch)
+            for fi, ref in enumerate(refs):
+                score[fi] += weights[k] * cca_score(filt, ref) ** 2
+        features.append(score.tolist())
+    return np.array(features)
+
+
+def fit_session_splits(features, labels, meta):
+    """
+    Trains one LDA model per leave-one-session-out split.
+    Returns a list of splits; each split stores the fitted model and train/test indices.
+    """
+    splits = []
+
+    for test_session in SESSIONS:
+        train_idx = np.array([i for i, m in enumerate(meta) if m[1] != test_session])
+        test_idx = np.array([i for i, m in enumerate(meta) if m[1] == test_session])
+
+        model = make_pipeline(
+            StandardScaler(),
+            LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto"),
+        )
+        model.fit(features[train_idx], labels[train_idx])
+
+        splits.append({
+            "test_session": test_session,
+            "train_idx": train_idx,
+            "test_idx": test_idx,
+            "model": model,
+        })
+
+    return splits
+
+
+def predict_by_split(splits, features, meta):
+    """
+    Predicts each trial using the split whose held-out session matches
+    that trial's session. Works for both training (cross-validated) and
+    held-out val sets — pass the corresponding features and meta arrays.
+    """
+    predictions = np.full(len(features), -1, dtype=int)
+    for split in splits:
+        idx = [i for i, m in enumerate(meta) if m[1] == split["test_session"]]
+        predictions[idx] = split["model"].predict(features[idx])
+    assert (predictions >= 0).all(), "some trials were not predicted"
+    return predictions
+
+
+def make_val_mask(meta):
+    """
+    Marks the last VAL_PER_SESSION trials of each (subject, session) group as validation.
+    These trials are set aside before any training and never used during model fitting.
+    """
+    mask = np.zeros(len(meta), dtype=bool)
+    for subject in SUBJECTS:
+        for session in SESSIONS:
+            group = [i for i, m in enumerate(meta) if m[0] == subject and m[1] == session]
+            mask[group[-VAL_PER_SESSION:]] = True
+    return mask
+
+
+def print_results(labels, predictions, meta, splits, n_features):
+    """
+    Prints classification metrics and shows a confusion matrix.
+    Reports per-split (train → test session), per-subject, and overall accuracy.
+    Pass splits=None to skip the per-split breakdown (e.g. for the val set).
+    """
+    def _abf(y_true, y_pred):
+        return (
+            accuracy_score(y_true, y_pred),
+            balanced_accuracy_score(y_true, y_pred),
+            f1_score(y_true, y_pred, average="macro"),
+        )
+
+    class_ids = np.arange(len(FREQS))
+
+    if splits is not None:
+        print("cross-session results")
+        for split in splits:
+            test_session = split["test_session"]
+            train_sessions = [s for s in SESSIONS if s != test_session]
+            acc, bacc, f1 = _abf(labels[split["test_idx"]], predictions[split["test_idx"]])
+            print(
+                f"  train {train_sessions} → test {test_session}: "
+                f"acc={acc:.3f}, bacc={bacc:.3f}, f1={f1:.3f}"
+            )
+        print()
+
+    for subject in SUBJECTS:
+        idx = np.array([m[0] == subject for m in meta])
+        acc, bacc, f1 = _abf(labels[idx], predictions[idx])
+        print(f"  subject {subject}: acc={acc:.3f}, bacc={bacc:.3f}, f1={f1:.3f}")
+
+    acc, bacc, f1 = _abf(labels, predictions)
+    cm = confusion_matrix(labels, predictions, labels=class_ids)
+
+    print(f"\noverall: acc={acc:.3f} ({acc:.1%}), bacc={bacc:.3f}, f1={f1:.3f}, features={n_features}")
+
+    fig, ax = plt.subplots(figsize=(5.5, 4.5))
+    im = ax.imshow(cm)
+    ax.set_title("confusion matrix")
+    ax.set_xlabel("predicted")
+    ax.set_ylabel("true")
+    ax.set_xticks(class_ids, [f"{f} Hz" for f in FREQS])
+    ax.set_yticks(class_ids, [f"{f} Hz" for f in FREQS])
+
+    for i, j in np.ndindex(cm.shape):
+        ax.text(
+            j, i, cm[i, j],
+            ha="center", va="center", color="white",
+            bbox=dict(facecolor="black", alpha=0.45, edgecolor="none", pad=2)
+        )
+
+    fig.colorbar(im, ax=ax, label="trials")
+    plt.tight_layout()
+    plt.show()
+
+
+
+
+def pca_2d_from_train(train_features, features_to_project=None):
+    """
+    Projects feature vectors to 2D using PCA implemented with SVD.
+
+    Important:
+    - This is only for visualization.
+    - It does not affect model training or evaluation.
+    - The PCA basis is fitted on train_features.
+      If features_to_project is provided, those vectors are projected into the
+      same 2D space.
+    """
+    train_features = np.asarray(train_features, dtype=float)
+    if features_to_project is None:
+        features_to_project = train_features
+    else:
+        features_to_project = np.asarray(features_to_project, dtype=float)
+
+    mean = train_features.mean(axis=0, keepdims=True)
+    std = train_features.std(axis=0, keepdims=True) + 1e-12
+
+    x_train = (train_features - mean) / std
+    x_proj = (features_to_project - mean) / std
+
+    _, _, vt = svd(x_train, full_matrices=False)
+
+    if vt.shape[0] == 0:
+        return np.zeros((len(features_to_project), 2))
+
+    coords = x_proj @ vt[:2].T
+    if coords.shape[1] == 1:
+        coords = np.column_stack([coords[:, 0], np.zeros(coords.shape[0])])
+
+    return coords[:, :2]
+
+
+def plot_feature_clusters(features, labels, meta, title, predictions=None):
+    """
+    Shows 2D PCA clusters of feature vectors.
+
+    Color = true stimulus frequency.
+    Marker = recording session.
+    Red X = misclassified trial, if predictions are passed.
+
+    This plot answers the question:
+        "Do trials of the same SSVEP frequency form visible clusters?"
+    """
+    features = np.asarray(features, dtype=float)
+    labels = np.asarray(labels)
+    coords = pca_2d_from_train(features)
+
+    fig, ax = plt.subplots(figsize=(7.5, 5.8))
+    cmap = plt.get_cmap("tab10")
+    session_markers = {1: "o", 2: "s"}
+
+    for class_id, freq in enumerate(FREQS):
+        for session in SESSIONS:
+            idx = np.array([
+                labels[i] == class_id and meta[i][1] == session
+                for i in range(len(labels))
+            ])
+            if not idx.any():
+                continue
+            ax.scatter(
+                coords[idx, 0], coords[idx, 1],
+                s=85,
+                marker=session_markers.get(session, "o"),
+                color=cmap(class_id),
+                alpha=0.82,
+                edgecolors="black",
+                linewidths=0.45,
+                label=f"{freq} Hz, session {session}",
+            )
+
+    if predictions is not None:
+        predictions = np.asarray(predictions)
+        wrong = predictions != labels
+        if wrong.any():
+            ax.scatter(
+                coords[wrong, 0], coords[wrong, 1],
+                s=180,
+                marker="x",
+                color="red",
+                linewidths=2.4,
+                label="misclassified",
+            )
+
+    ax.axhline(0, color="gray", linewidth=0.7, alpha=0.45)
+    ax.axvline(0, color="gray", linewidth=0.7, alpha=0.45)
+    ax.set_title(title)
+    ax.set_xlabel("PCA component 1")
+    ax.set_ylabel("PCA component 2")
+    ax.grid(True, alpha=0.25)
+    ax.legend(fontsize=8, ncol=2, framealpha=0.85)
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_train_val_clusters(tr_features, tr_labels, tr_meta,
+                            val_features, val_labels, val_meta,
+                            predictions_val=None):
+    """
+    Shows train and held-out validation trials in the same PCA space.
+
+    PCA is fitted only on the training features, then validation features are
+    projected into that same space. This avoids letting the held-out validation
+    set define the visualization axes.
+
+    Color = true stimulus frequency.
+    Small transparent circles = training trials.
+    Large diamond markers = held-out validation trials.
+    Red X = wrong validation prediction, if predictions_val is passed.
+    """
+    tr_features = np.asarray(tr_features, dtype=float)
+    val_features = np.asarray(val_features, dtype=float)
+    tr_labels = np.asarray(tr_labels)
+    val_labels = np.asarray(val_labels)
+
+    tr_coords = pca_2d_from_train(tr_features, tr_features)
+    val_coords = pca_2d_from_train(tr_features, val_features)
+
+    fig, ax = plt.subplots(figsize=(7.5, 5.8))
+    cmap = plt.get_cmap("tab10")
+
+    for class_id, freq in enumerate(FREQS):
+        tr_idx = tr_labels == class_id
+        val_idx = val_labels == class_id
+
+        if tr_idx.any():
+            ax.scatter(
+                tr_coords[tr_idx, 0], tr_coords[tr_idx, 1],
+                s=55,
+                marker="o",
+                color=cmap(class_id),
+                alpha=0.35,
+                edgecolors="none",
+                label=f"train {freq} Hz",
+            )
+
+        if val_idx.any():
+            ax.scatter(
+                val_coords[val_idx, 0], val_coords[val_idx, 1],
+                s=125,
+                marker="D",
+                color=cmap(class_id),
+                alpha=0.92,
+                edgecolors="black",
+                linewidths=0.7,
+                label=f"val {freq} Hz",
+            )
+
+    if predictions_val is not None:
+        predictions_val = np.asarray(predictions_val)
+        wrong = predictions_val != val_labels
+        if wrong.any():
+            ax.scatter(
+                val_coords[wrong, 0], val_coords[wrong, 1],
+                s=210,
+                marker="x",
+                color="red",
+                linewidths=2.5,
+                label="wrong val prediction",
+            )
+
+    ax.axhline(0, color="gray", linewidth=0.7, alpha=0.45)
+    ax.axvline(0, color="gray", linewidth=0.7, alpha=0.45)
+    ax.set_title("feature clusters: training vs held-out validation")
+    ax.set_xlabel("PCA component 1, fitted on training features")
+    ax.set_ylabel("PCA component 2")
+    ax.grid(True, alpha=0.25)
+    ax.legend(fontsize=8, ncol=2, framealpha=0.85)
+    fig.tight_layout()
+    plt.show()
+
+# Load and preprocess all 80 trials upfront
+trials_raw, labels_all, meta_all = load_dataset()
+trials_raw = preprocess(trials_raw)
+
+# features_all = extract_features_cca(trials_raw)
+features_all = extract_features_fbcca(trials_raw)
+
+# Hold out the last VAL_PER_SESSION trials of each (subject, session) group.
+# val_mask is set before any model fitting and never changes after this point.
+val_mask = make_val_mask(meta_all)
+tr_mask = ~val_mask
+
+tr_features = features_all[tr_mask]
+tr_labels = labels_all[tr_mask]
+tr_meta = [m for i, m in enumerate(meta_all) if tr_mask[i]]
+
+val_features = features_all[val_mask]
+val_labels = labels_all[val_mask]
+val_meta = [m for i, m in enumerate(meta_all) if val_mask[i]]
+
+print(f"train: {tr_mask.sum()} trials  |  val (held out): {val_mask.sum()} trials")
+
+splits = fit_session_splits(tr_features, tr_labels, tr_meta)
+
+# Cross-validated predictions: each trial predicted by the model that never saw its session.
+predictions_cv = predict_by_split(splits, tr_features, tr_meta)
+
+# Val predictions — model never saw these specific trials during training.
+# Val trial from session X → predicted by the split trained on session X.
+predictions_val = predict_by_split(splits, val_features, val_meta)
+
+# Combined predictions for all 80 trials (used in comparison table)
+predictions_all = np.full(len(labels_all), -1, dtype=int)
+predictions_all[np.where(tr_mask)[0]] = predictions_cv
+predictions_all[np.where(val_mask)[0]] = predictions_val
+assert (predictions_all >= 0).all()
+
+# In-sample predictions for overfitting gap check
+train_predictions = np.zeros(len(tr_features), dtype=int)
+for split in splits:
+    idx = split["train_idx"]
+    train_predictions[idx] = split["model"].predict(tr_features[idx])
+
+print("\noverfitting gap (train acc − test acc)")
+for split in splits:
+    test_session = split["test_session"]
+    train_sessions = [s for s in SESSIONS if s != test_session]
+    tr_i = split["train_idx"]
+    te_i = split["test_idx"]
+
+    tr_acc = accuracy_score(tr_labels[tr_i], train_predictions[tr_i])
+    te_acc = accuracy_score(tr_labels[te_i], predictions_cv[te_i])
+    gap = tr_acc - te_acc
+
+    print(
+        f"  train {train_sessions} → test {test_session}: "
+        f"train={tr_acc:.3f}, test={te_acc:.3f}, gap={gap:+.3f}"
+    )
+
+print("\n--- cross-validated (60 training trials) ---")
+print_results(tr_labels, predictions_cv, tr_meta, splits, tr_features.shape[1])
+plot_feature_clusters(
+    tr_features,
+    tr_labels,
+    tr_meta,
+    "feature clusters — cross-validated training trials",
+    predictions_cv,
+)
+
+print("\n--- held-out val set (20 trials, never seen during training) ---")
+print_results(val_labels, predictions_val, val_meta, None, val_features.shape[1])
+plot_feature_clusters(
+    val_features,
+    val_labels,
+    val_meta,
+    "feature clusters — held-out validation trials",
+    predictions_val,
+)
+plot_train_val_clusters(
+    tr_features,
+    tr_labels,
+    tr_meta,
+    val_features,
+    val_labels,
+    val_meta,
+    predictions_val,
+)
+
+BASELINE_2024 = {
+    (1, 1): {"CCA": 95, "FBCCA": 80, "LDA": 65},
+    (1, 2): {"CCA": 100, "FBCCA": 65, "LDA": 70},
+    (2, 1): {"CCA": 70, "FBCCA": 40, "LDA": 20},
+    (2, 2): {"CCA": 45, "FBCCA": 40, "LDA": 15},
+}
+
+
+def print_comparison_metrics(labels, predictions, meta):
+    """
+    Prints accuracy of the current version together with old 2024 metrics.
+    Uses already computed predictions only. No training here.
+    """
+    print("current vs 2024  (BR41N.IO_SSVEP_dataset, cross-session)\n")
+
+    header = f"{'subj':>6} {'sess':>6} {'current %':>10} {'CCA %':>8} {'FBCCA %':>9} {'LDA %':>7}"
+    print(header)
+    print("-" * len(header))
+
+    rows = []
+    for (subject, session), old in BASELINE_2024.items():
+        idx = [i for i, m in enumerate(meta) if m[0] == subject and m[1] == session]
+        if not idx:
+            continue
+
+        current_acc = accuracy_score(labels[idx], predictions[idx]) * 100
+        rows.append([current_acc, old["CCA"], old["FBCCA"], old["LDA"]])
+
+        print(f"{subject:>6} {session:>6} {current_acc:>10.1f} {old['CCA']:>8} {old['FBCCA']:>9} {old['LDA']:>7}")
+
+    means = np.mean(rows, axis=0)
+    print("-" * len(header))
+    print(f"{'mean':>6} {'':>6} {means[0]:>10.1f} {means[1]:>8.1f} {means[2]:>9.1f} {means[3]:>7.1f}")
+
+
+print("--- all 80 trials ---")
+print_comparison_metrics(labels_all, predictions_all, meta_all)
+
+print("\n--- held-out val set ---")
+print_comparison_metrics(val_labels, predictions_val, val_meta)
