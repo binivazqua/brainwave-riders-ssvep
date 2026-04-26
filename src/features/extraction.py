@@ -333,3 +333,79 @@ def windows_to_features(
         rows.append(feat)
 
     return pd.DataFrame(rows)
+
+
+def augmentation_stats(
+    df: pd.DataFrame,
+    eeg_cols: list,
+    win_sizes: list = None,
+    step_sec: float = 0.5,
+    pre_sec: float = PRE_SEC,
+    fs: int = FS,
+) -> pd.DataFrame:
+    """
+    Report how many windows sliding augmentation yields for each window size.
+
+    Parameters
+    ----------
+    df        : preprocessed DataFrame (from preprocess())
+    eeg_cols  : channels used (only needed to confirm columns exist)
+    win_sizes : list of window durations in seconds to evaluate.
+                Default: [1, 2, 3, 4, 5, 6, 6.85]
+    step_sec  : sliding step in seconds (default 0.5)
+    pre_sec   : pre-stimulus seconds skipped (default 0.5)
+    fs        : sampling rate (default 256)
+
+    Returns
+    -------
+    pd.DataFrame with columns:
+        win_sec         — window duration
+        wins_per_trial  — number of windows extracted per trial
+        n_trials        — total trials in df (always 20, but clarity enhancer)
+        total_windows   — wins_per_trial × n_trials
+        aug_factor      — total_windows / n_trials  (x times increase)
+
+    Example
+    -------
+    >>> stats = augmentation_stats(train_df, EEG_COLS)
+    >>> print(stats.to_string(index=False))
+
+    Typical output (20 trials, 6.855 s usable, step 0.5 s):
+        win_sec  wins_per_trial  n_trials  total_windows  aug_factor
+           1.00              12        20            240        12.0
+           2.00              10        20            200        10.0
+          ...
+
+    Notes
+    -----
+    aug_factor = 1 at the full-trial window (no overlap possible).
+    Apply sliding windows to training data only — never to held-out sessions.
+    """
+    if win_sizes is None:
+        win_sizes = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 6.85]
+
+    pre_n    = int(pre_sec * fs)
+    step_n   = int(step_sec * fs)
+    n_trials = int(df["trial"].max())
+
+    # Measure usable samples per trial (after pre-stim skip)
+    usable = []
+    for t in range(1, n_trials + 1):
+        td = df[df["trial"] == t]
+        usable.append(max(0, len(td) - pre_n))
+
+    rows = []
+    for w in win_sizes:
+        win_n = int(w * fs)
+        counts = [max(0, (u - win_n) // step_n + 1) for u in usable]
+        wins_per_trial = counts[0] if counts else 0   # all trials same length
+        total          = sum(counts)
+        rows.append({
+            "win_sec":        round(w, 2),
+            "wins_per_trial": wins_per_trial,
+            "n_trials":       n_trials,
+            "total_windows":  total,
+            "aug_factor":     round(total / n_trials, 1),
+        })
+
+    return pd.DataFrame(rows)
