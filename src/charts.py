@@ -16,6 +16,7 @@ All data is loaded from results/ CSVs — no re-computation needed.
 """
 
 from pathlib import Path
+import pickle
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -25,6 +26,7 @@ from plotly.subplots import make_subplots
 _ROOT = Path(__file__).resolve().parent.parent
 _PIPELINE_CSV = _ROOT / "results" / "full_pipeline_results.csv"
 _WINDOW_CSV   = _ROOT / "results" / "sliding_window_results.csv"
+_PICKLE_PATH  = _ROOT / "results" / "data.pkl"
 
 # ── Palette ───────────────────────────────────────────────────────────────
 BLUE   = "#4878CF"
@@ -58,6 +60,11 @@ def _itr(P, T_win, N=4, ITI=3.145):
         return 0.0
     B = np.log2(N) + P*np.log2(P) + (1-P)*np.log2((1-P)/(N-1)) if P < 1.0 else np.log2(N)
     return B * 60.0 / (T_win + ITI)
+
+
+def _load_pickle_data():
+    with open(_PICKLE_PATH, "rb") as f:
+        return pickle.load(f)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -379,4 +386,188 @@ def fig_scorecard(classifier="SVM"):
         xaxis=dict(title=""),
     )
     _clean_layout(fig, title=f"LOSO Accuracy Scorecard  ({classifier})", height=320)
+    return fig
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 7. PSD FRAGILITY STORY  (trial-level SNR vs correctness)
+# ═══════════════════════════════════════════════════════════════════════════
+def fig_psd_fragility():
+    """
+    Subject-wise scatter of Oz SNR versus PSD correctness.
+    This makes the 'hard responder' story explicit at the trial level.
+    """
+    data = _load_pickle_data()
+    df = data["snr_vs_success"].copy()
+    fig = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=["Subject 1", "Subject 2"],
+        shared_yaxes=True,
+        horizontal_spacing=0.08,
+    )
+
+    for col, subj in enumerate([1, 2], 1):
+        sub = df[df["subject"] == subj].copy()
+        sub["y"] = sub["correct"].astype(int)
+        # Deterministic jitter keeps the false/true rows visually readable.
+        offsets = np.linspace(-0.09, 0.09, len(sub))
+        sub["y_jitter"] = sub["y"] + offsets
+
+        correct = sub[sub["correct"]]
+        incorrect = sub[~sub["correct"]]
+
+        fig.add_trace(go.Scatter(
+            x=correct["snr"], y=correct["y_jitter"],
+            mode="markers",
+            name="Correct",
+            marker=dict(color=GREEN, size=10, line=dict(color="white", width=1)),
+            legendgroup="Correct",
+            showlegend=(col == 1),
+            customdata=correct[["trial", "target", "predicted"]],
+            hovertemplate=(
+                "Trial %{customdata[0]}<br>"
+                "Target %{customdata[1]:.0f} Hz<br>"
+                "Predicted %{customdata[2]:.0f} Hz<br>"
+                "Oz SNR %{x:.2f}<extra>Correct</extra>"
+            ),
+        ), row=1, col=col)
+
+        fig.add_trace(go.Scatter(
+            x=incorrect["snr"], y=incorrect["y_jitter"],
+            mode="markers",
+            name="Incorrect",
+            marker=dict(color=RED, size=10, symbol="x", line=dict(color="white", width=1)),
+            legendgroup="Incorrect",
+            showlegend=(col == 1),
+            customdata=incorrect[["trial", "target", "predicted"]],
+            hovertemplate=(
+                "Trial %{customdata[0]}<br>"
+                "Target %{customdata[1]:.0f} Hz<br>"
+                "Predicted %{customdata[2]:.0f} Hz<br>"
+                "Oz SNR %{x:.2f}<extra>Incorrect</extra>"
+            ),
+        ), row=1, col=col)
+
+        acc = sub["correct"].mean()
+        fig.add_annotation(
+            xref=f"x{col if col > 1 else ''} domain",
+            yref=f"y{col if col > 1 else ''}",
+            x=0.02,
+            y=1.17,
+            text=f"PSD trial accuracy: <b>{acc:.0%}</b>",
+            showarrow=False,
+            font=dict(size=11, color=SUB_COLORS[f"Subject {subj}"]),
+            align="left",
+        )
+
+    fig.update_yaxes(
+        tickmode="array",
+        tickvals=[0, 1],
+        ticktext=["Miss", "Hit"],
+        range=[-0.25, 1.25],
+        title_text="PSD Trial Outcome",
+        row=1, col=1,
+    )
+    fig.update_xaxes(title_text="Oz SNR at True Target (h1)")
+    _clean_layout(
+        fig,
+        title="Why PSD Breaks on the Hard Subject"
+              "<br><sup>Trial-level LOSO predictions from the pickle, using Oz fundamental SNR</sup>",
+        height=430,
+    )
+    return fig
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 8. SPEED VS CERTAINTY STORY  (FBCCA only)
+# ═══════════════════════════════════════════════════════════════════════════
+def fig_fbcca_speed_accuracy_tradeoff():
+    """
+    Dual-axis view of FBCCA accuracy and ITR by window length.
+    Emphasises that the best communication speed is not always the highest accuracy.
+    """
+    data = _load_pickle_data()
+    sw = data["sliding_window_avg"].copy()
+    itr = data["itr"].copy()
+    story = data.get("story", {})
+
+    fig = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=["Subject 1", "Subject 2"],
+        shared_yaxes=False,
+        horizontal_spacing=0.08,
+        specs=[[{"secondary_y": True}, {"secondary_y": True}]],
+    )
+
+    for col, subj in enumerate([1, 2], 1):
+        acc = sw[(sw["method"] == "FBCCA") & (sw["subject"] == subj)].sort_values("win_sec")
+        itr_sub = itr[(itr["method"] == "FBCCA") & (itr["subject"] == subj)].sort_values("win_sec")
+        peak = itr_sub.loc[itr_sub["itr"].idxmax()]
+        full_acc = acc[acc["accuracy_mean"] >= 1.0].iloc[0]
+
+        fig.add_trace(go.Scatter(
+            x=acc["win_sec"], y=acc["accuracy_mean"],
+            mode="lines+markers",
+            name="Accuracy",
+            line=dict(color=SUB_COLORS[f"Subject {subj}"], width=3),
+            marker=dict(size=8),
+            legendgroup=f"acc{subj}",
+            showlegend=(col == 1),
+            hovertemplate="Window %{x:.2f}s<br>Accuracy %{y:.1%}<extra></extra>",
+        ), row=1, col=col, secondary_y=False)
+
+        fig.add_trace(go.Scatter(
+            x=itr_sub["win_sec"], y=itr_sub["itr"],
+            mode="lines+markers",
+            name="ITR",
+            line=dict(color="#111111", width=2, dash="dot"),
+            marker=dict(size=7, color="#111111"),
+            legendgroup="itr",
+            showlegend=(col == 1),
+            hovertemplate="Window %{x:.2f}s<br>ITR %{y:.1f} b/m<extra></extra>",
+        ), row=1, col=col, secondary_y=True)
+
+        fig.add_vline(
+            x=peak["win_sec"],
+            line_dash="dot",
+            line_color=RED,
+            row=1,
+            col=col,
+        )
+        fig.add_vline(
+            x=full_acc["win_sec"],
+            line_dash="dash",
+            line_color=GREEN,
+            row=1,
+            col=col,
+        )
+
+        fig.add_annotation(
+            x=peak["win_sec"], y=peak["itr"],
+            text=f"Peak speed<br><b>{peak['itr']:.1f} b/m</b>",
+            showarrow=True, arrowhead=2, arrowcolor=RED,
+            ax=20, ay=-35,
+            font=dict(size=10, color=RED),
+            row=1, col=col,
+        )
+        fig.add_annotation(
+            x=full_acc["win_sec"], y=full_acc["accuracy_mean"],
+            text=f"Full accuracy<br><b>{full_acc['win_sec']:.2f}s</b>",
+            showarrow=True, arrowhead=2, arrowcolor=GREEN,
+            ax=-25, ay=-35,
+            font=dict(size=10, color=GREEN),
+            row=1, col=col,
+        )
+
+    fig.update_yaxes(title_text="Accuracy", tickformat=".0%", range=[0.6, 1.05], row=1, col=1, secondary_y=False)
+    fig.update_yaxes(title_text="Accuracy", tickformat=".0%", range=[0.6, 1.05], row=1, col=2, secondary_y=False)
+    fig.update_yaxes(title_text="ITR (bits/min)", row=1, col=1, secondary_y=True)
+    fig.update_yaxes(title_text="ITR (bits/min)", row=1, col=2, secondary_y=True)
+    fig.update_xaxes(title_text="Window Length (s)")
+    _clean_layout(
+        fig,
+        title="FBCCA: Speed vs Certainty"
+              "<br><sup>Peak ITR and perfect accuracy happen at different windows for Subject 1</sup>",
+        height=440,
+    )
     return fig

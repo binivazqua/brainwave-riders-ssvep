@@ -7,3 +7,5 @@ pandas>=2.2.0
 seaborn>=0.13.0
 jupyter>=1.0.0
 ipykernel>=6.29.0
+plotly>=5.24.0
+streamlit>=1.39.0
