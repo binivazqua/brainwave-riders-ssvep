@@ -7,12 +7,12 @@
 [![Python](https://img.shields.io/badge/Python-3.9-blue?logo=python&logoColor=white)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.50-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io)
 [![Plotly](https://img.shields.io/badge/Plotly-6.7-3F4F75?logo=plotly&logoColor=white)](https://plotly.com)
-[![Event](https://img.shields.io/badge/BR41N.IO-Spring%20School%202026-8A2BE2)](https://www.br41n.io/)
+[![Event](https://img.shields.io/badge/BR41N.IO-Spring%20School%202026-00C853)](https://www.br41n.io/)
 [![License](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
 
-</div>
+<img src="https://img.shields.io/badge/-%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0-00C853?style=flat&labelColor=00C853&color=00C853" alt="green divider"/>
 
----
+</div>
 
 ## The Story
 
@@ -22,7 +22,7 @@ That's SSVEP. And our question was: **how well, how fast, and for whom?**
 
 We found that the answer is completely different depending on the person — and that's the most interesting thing we discovered.
 
----
+<div align="center"><img src="https://img.shields.io/badge/-%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95-00C853?style=flat&labelColor=00C853&color=00C853" alt=""/></div>
 
 ## Results at a Glance
 
@@ -39,7 +39,7 @@ We found that the answer is completely different depending on the person — and
 > Subject 2 needs the full 6.85 s to reach 100% — 12.0 bits/min.
 > **100% accuracy is not always the optimal target.**
 
----
+<div align="center"><img src="https://img.shields.io/badge/-%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95-00C853?style=flat&labelColor=00C853&color=00C853" alt=""/></div>
 
 ## Signal Evidence
 
@@ -51,7 +51,7 @@ We found that the answer is completely different depending on the person — and
 
 Clear spectral peaks at target frequencies and harmonics — the raw evidence that SSVEP is happening.
 
-![PSD per class](results/figures/01_psd_per_class_all_sessions.png)
+![PSD per class](https://raw.githubusercontent.com/binivazqua/brainwave-riders-ssvep/main/results/figures/01_psd_per_class_all_sessions.png)
 
 </td>
 <td width="50%">
@@ -60,7 +60,7 @@ Clear spectral peaks at target frequencies and harmonics — the raw evidence th
 
 Subject 1 is purely occipital. Subject 2's response is strongest at PO7/PO8 — which is why a standard 3-channel montage failed them.
 
-![SNR heatmap](results/figures/02_snr_heatmap_comparison.png)
+![SNR heatmap](https://raw.githubusercontent.com/binivazqua/brainwave-riders-ssvep/main/results/figures/02_snr_heatmap_comparison.png)
 
 </td>
 </tr>
@@ -71,7 +71,7 @@ Subject 1 is purely occipital. Subject 2's response is strongest at PO7/PO8 — 
 
 Four clean clusters — one per stimulus frequency. This is what 100% accuracy looks like geometrically.
 
-![CCA feature space](results/figures/05_pca_cca_feature_space.png)
+![CCA feature space](https://raw.githubusercontent.com/binivazqua/brainwave-riders-ssvep/main/results/figures/05_pca_cca_feature_space.png)
 
 </td>
 <td width="50%">
@@ -80,13 +80,13 @@ Four clean clusters — one per stimulus frequency. This is what 100% accuracy l
 
 Overlapping blobs. Same data, wrong tool — explains why PSD tops out at 57% for Subject 1 and 35% for Subject 2.
 
-![PSD feature space](results/figures/04_pca_psd_feature_space.png)
+![PSD feature space](https://raw.githubusercontent.com/binivazqua/brainwave-riders-ssvep/main/results/figures/04_pca_psd_feature_space.png)
 
 </td>
 </tr>
 </table>
 
----
+<div align="center"><img src="https://img.shields.io/badge/-%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95-00C853?style=flat&labelColor=00C853&color=00C853" alt=""/></div>
 
 ## Pipeline
 
@@ -126,7 +126,7 @@ Raw EEG (.mat, MATLAB v5)
 - **SVD-based CCA** (not sklearn) — robust to near-singular matrices at short windows
 - **FBCCA over eTRCA** — eTRCA needs ≥15 training trials/frequency; LOSO gives us 5
 
----
+<div align="center"><img src="https://img.shields.io/badge/-%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95-00C853?style=flat&labelColor=00C853&color=00C853" alt=""/></div>
 
 ## The BCI-Illiteracy Finding
 
@@ -143,17 +143,17 @@ This is the core argument for SNR-robust, training-free methods in clinical BCI 
 </td>
 <td width="45%">
 
-![Subject 2 SNR correlation](results/figures/07_subject2_snr_correlation.png)
+![Subject 2 SNR correlation](https://raw.githubusercontent.com/binivazqua/brainwave-riders-ssvep/main/results/figures/07_subject2_snr_correlation.png)
 
 </td>
 </tr>
 </table>
 
----
+<div align="center"><img src="https://img.shields.io/badge/-%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95-00C853?style=flat&labelColor=00C853&color=00C853" alt=""/></div>
 
 ## Sliding Window × ITR
 
-![Sliding window accuracy](results/figures/discord/08_sliding_window.png)
+![Sliding window accuracy](https://raw.githubusercontent.com/binivazqua/brainwave-riders-ssvep/main/results/figures/discord/08_sliding_window.png)
 
 | Window | Wins/trial | Total samples (20 trials) | Aug. factor |
 |---|:---:|:---:|:---:|
@@ -163,9 +163,9 @@ This is the core argument for SNR-robust, training-free methods in clinical BCI 
 
 *Step = 0.5 s. Applied to training data only — test sessions untouched (LOSO integrity preserved).*
 
-![ITR analysis](results/figures/discord/09_sliding_window_itr.png)
+![ITR analysis](https://raw.githubusercontent.com/binivazqua/brainwave-riders-ssvep/main/results/figures/discord/09_sliding_window_itr.png)
 
----
+<div align="center"><img src="https://img.shields.io/badge/-%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95-00C853?style=flat&labelColor=00C853&color=00C853" alt=""/></div>
 
 ## Why Not eTRCA?
 
@@ -173,7 +173,7 @@ eTRCA achieves ≥96% on the Nakanishi 2015 benchmark. We tested it. On our data
 
 The reason is exact: each frequency gets only **5 training trials under LOSO**. eTRCA's inter-trial covariance matrix `S = (ΣX)(ΣX)ᵀ − ΣXᵢXᵢᵀ` is near-singular at that sample size — the spatial filter it learns is noise. FBCCA doesn't care. Its reference is a sine wave — it always knows what to look for.
 
----
+<div align="center"><img src="https://img.shields.io/badge/-%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95-00C853?style=flat&labelColor=00C853&color=00C853" alt=""/></div>
 
 ## Repository Structure
 
@@ -212,7 +212,7 @@ brainwave-riders-ssvep/
 └── run_sliding_window.py         # Re-run full LOSO sliding window analysis
 ```
 
----
+<div align="center"><img src="https://img.shields.io/badge/-%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95-00C853?style=flat&labelColor=00C853&color=00C853" alt=""/></div>
 
 ## Quick Start
 
@@ -236,7 +236,7 @@ print(extract_fbcca(df, EEG_COLS, STIM_FREQS, win_sec=6.85))
 
 > Recompute results after adding new data: `python generate_pickle.py`
 
----
+<div align="center"><img src="https://img.shields.io/badge/-%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95-00C853?style=flat&labelColor=00C853&color=00C853" alt=""/></div>
 
 ## Stack
 
@@ -250,25 +250,25 @@ print(extract_fbcca(df, EEG_COLS, STIM_FREQS, win_sec=6.85))
 | Dashboard | `streamlit` |
 | Data exchange | `pickle` (100 KB, zero recompute on deploy) |
 
----
+<div align="center"><img src="https://img.shields.io/badge/-%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95%E2%80%95-00C853?style=flat&labelColor=00C853&color=00C853" alt=""/></div>
 
 ## Team
 
 <table>
 <tr>
-<td align="center" width="50%">
+<td align="center" width="33%">
 
-### Bini Vázquez
+### 🧠 Biniza Vázquez
 **Tecnológico de Monterrey**
 
-Signal processing · FBCCA pipeline · CCA / SVD implementation · Sliding window analysis · ITR theory · `src/` module architecture · Streamlit integration · eTRCA feasibility test
+Signal processing · FBCCA pipeline · CCA / SVD implementation · Sliding window analysis · ITR theory · `src/` module architecture · eTRCA feasibility test
 
-*Ran 56 LOSO evaluations across 7 window sizes, 2 methods, 2 subjects and 2 LOSO folds.*
+*Ran 56 LOSO evaluations across 7 window sizes, 2 methods, 2 subjects and 2 folds.*
 
 </td>
-<td align="center" width="50%">
+<td align="center" width="33%">
 
-### Denis Riabkin
+### 🖥️ Mariami Chakhvadze
 **Ilia State University**
 
 Streamlit dashboard · Interactive Plotly visualisation · Story narrative · UX/UI design · Cross-session data pipeline · Webapp architecture
@@ -276,12 +276,50 @@ Streamlit dashboard · Interactive Plotly visualisation · Story narrative · UX
 *Built the 5-tab story dashboard that turns 56 numbers into a coherent argument.*
 
 </td>
+<td align="center" width="33%">
+
+### 🔬 Denis Riabkin
+**Ilia State University**
+
+Research · Dataset analysis · Cross-session pipeline · Experiment design support
+
+</td>
+</tr>
+<tr>
+<td align="center" width="33%">
+
+### 🔬 Saba Kvinikadze
+**Ilia State University**
+
+Research · Literature review · SSVEP paradigm study · Experimental methodology
+
+</td>
+<td align="center" width="33%">
+
+### 🔬 Gleb Matcegora
+**Ilia State University**
+
+Research · Signal analysis · Dataset exploration · Result validation
+
+</td>
+<td align="center" width="33%">
+
+### 🔬 Alexander Dunaykin
+**Ilia State University**
+
+Research · Neuroscience background · BCI theory · Experiment support
+
+</td>
 </tr>
 </table>
 
-> **Brainwave Riders** — collaborating remotely across two continents for the **BR41N.IO Spring School Hackathon 2026**.
+<div align="center">
 
----
+> **Brainwave Riders** — six researchers collaborating remotely across two continents for the **BR41N.IO Spring School Hackathon 2026**.
+
+<img src="https://img.shields.io/badge/-%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0%E2%96%A0-00C853?style=flat&labelColor=00C853&color=00C853" alt="green divider"/>
+
+</div>
 
 ## References
 
