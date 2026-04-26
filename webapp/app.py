@@ -339,6 +339,13 @@ def inject_css() -> None:
         div[data-testid="stTabs"] button {{
             font-weight: 700;
         }}
+        .sim-wrap {{
+            background: #0e1117;
+            border-radius: 20px;
+            padding: 1rem;
+            box-shadow: 0 24px 56px rgba(30,20,10,0.18);
+            margin: 0.5rem 0 1rem 0;
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -426,9 +433,10 @@ def fig_method_story(data: dict) -> go.Figure:
             )
         )
 
-    fig.add_hline(y=0.25, line_dash="dash", line_color="#8e8a82")
+    fig.add_hline(y=0.25, line_dash="dash", line_color=MUTED)
     fig.update_layout(
-        template="plotly_white",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=PANEL,
         title="Method progression: PSD → CCA → FBCCA",
         barmode="group",
         yaxis=dict(title="Mean LOSO Accuracy", range=[0, 1.12], tickformat=".0%"),
@@ -469,7 +477,8 @@ def fig_channel_story(data: dict) -> go.Figure:
             )
         )
     fig.update_layout(
-        template="plotly_white",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=PANEL,
         title="Channel coverage matters only for the hard subject",
         barmode="group",
         yaxis=dict(title="Mean LOSO Accuracy", range=[0, 1.12], tickformat=".0%"),
@@ -517,8 +526,8 @@ def fig_fbcca_window_story(data: dict) -> go.Figure:
                 y=itr_sub["itr"],
                 mode="lines+markers",
                 name="ITR",
-                line=dict(color="#1f1c18", width=2, dash="dot"),
-                marker=dict(size=7, color="#1f1c18"),
+                line=dict(color=ACCENT_3, width=2, dash="dot"),
+                marker=dict(size=7, color=ACCENT_3),
                 legendgroup="itr",
                 showlegend=(col == 1),
             ),
@@ -542,12 +551,13 @@ def fig_fbcca_window_story(data: dict) -> go.Figure:
         )
 
     fig.update_yaxes(title_text="Accuracy", tickformat=".0%", range=[0.6, 1.05], row=1, col=1, secondary_y=False)
-    fig.update_yaxes(title_text="Accuracy", tickformat=".0%", range=[0.6, 1.05], row=1, col=2, secondary_y=False)
+    fig.update_yaxes(title_text="",          tickformat=".0%", range=[0.6, 1.05], row=1, col=2, secondary_y=False)
     fig.update_yaxes(title_text="ITR (bits/min)", row=1, col=1, secondary_y=True)
-    fig.update_yaxes(title_text="ITR (bits/min)", row=1, col=2, secondary_y=True)
+    fig.update_yaxes(title_text="",              row=1, col=2, secondary_y=True)
     fig.update_xaxes(title_text="Window length (s)")
     fig.update_layout(
-        template="plotly_white",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=PANEL,
         title="FBCCA window tradeoff: speed and certainty do not peak together",
         height=430,
         margin=dict(l=50, r=20, t=60, b=40),
@@ -757,11 +767,6 @@ def render_utility_tab(pickle_data: dict | None) -> None:
     with top_right:
         st.plotly_chart(pp.accuracy_curves(cross["acc_rows"]), use_container_width=True, key="acc_curves")
 
-    if SIMULATOR_PATH.exists():
-        with st.expander("Open the animated window-length simulator", expanded=False):
-            html = SIMULATOR_PATH.read_text(encoding="utf-8")
-            components.html(html, height=620, scrolling=False)
-
     bottom_left, bottom_right = st.columns(2)
     with bottom_left:
         st.plotly_chart(pp.snr_comparison(cross["snr_records"]), use_container_width=True, key="snr_comp")
@@ -774,6 +779,25 @@ def render_utility_tab(pickle_data: dict | None) -> None:
         summary_df["cca_accuracy_4s"] = summary_df["cca_accuracy_4s"].map(pct)
         summary_df["online_lda_accuracy"] = summary_df["online_lda_accuracy"].map(pct)
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+
+def render_simulator_tab() -> None:
+    story_block(
+        "Interactive window-length simulator",
+        "Use the slider to step through decision windows from 1 s to 6.85 s. "
+        "Watch how FBCCA confidence (accuracy %) and information throughput (ITR) evolve "
+        "as more data cycles through the filter bank — and where Subject 1 and Subject 2 peak.",
+    )
+    if SIMULATOR_PATH.exists():
+        st.markdown("<div class='sim-wrap'>", unsafe_allow_html=True)
+        html = SIMULATOR_PATH.read_text(encoding="utf-8")
+        components.html(html, height=640, scrolling=False)
+        st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.warning(
+            f"Simulator not found at `{SIMULATOR_PATH}`. "
+            "Run `python build_simulator.py` from the repo root to generate it."
+        )
 
 
 def render_explorer_tab() -> None:
@@ -850,7 +874,8 @@ def main() -> None:
         "1. Signal Fragility",
         "2. Methods",
         "3. Utility",
-        "4. Explorer",
+        "4. Simulator",
+        "5. Explorer",
     ])
 
     with tabs[0]:
@@ -860,6 +885,8 @@ def main() -> None:
     with tabs[2]:
         render_utility_tab(pickle_data)
     with tabs[3]:
+        render_simulator_tab()
+    with tabs[4]:
         render_explorer_tab()
 
     st.markdown(

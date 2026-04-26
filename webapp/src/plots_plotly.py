@@ -17,8 +17,22 @@ except ImportError:
     from loader import CH_NAMES, TARGET_FREQS, Session, detect_trials
     from preprocess import Epochs
 
-CLASS_COLORS = {9: "#E63946", 10: "#F4A261", 12: "#2A9D8F", 15: "#264653"}
+# Aligned to app.py story palette (ACCENT_2 / ACCENT_3 / ACCENT_4 / ACCENT)
+CLASS_COLORS = {9: "#3f6fd8", 10: "#1f8a70", 12: "#af7d2d", 15: "#d95d39"}
 SESSION_SYMBOLS = {1: "circle", 2: "square", 3: "diamond", 4: "cross"}
+
+# ── Theme helper — transparent bg so charts breathe with the parchment app ──
+_PANEL = "#fffdf9"
+
+def _apply_theme(fig: go.Figure) -> go.Figure:
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=_PANEL,
+        font=dict(color="#181715", family="system-ui, -apple-system, sans-serif"),
+    )
+    return fig
+
+
 
 
 def raw_overview(session: Session, eeg_filt: np.ndarray,
@@ -89,7 +103,7 @@ def raw_overview(session: Session, eeg_filt: np.ndarray,
         height=600, margin=dict(l=60, r=20, t=100, b=50),
         legend=dict(orientation="h", y=1.12, x=1, xanchor="right"),
     )
-    return fig
+    return _apply_theme(fig)
 
 
 def class_distribution(epochs: Epochs, session: Session) -> go.Figure:
@@ -110,7 +124,7 @@ def class_distribution(epochs: Epochs, session: Session) -> go.Figure:
         yaxis=dict(range=[0, max(counts.values()) + 2]),
         height=420, margin=dict(l=60, r=20, t=70, b=50),
     )
-    return fig
+    return _apply_theme(fig)
 
 
 def psd_per_class(epochs: Epochs, session: Session) -> go.Figure:
@@ -142,7 +156,7 @@ def psd_per_class(epochs: Epochs, session: Session) -> go.Figure:
         legend=dict(title="Trial class"),
         height=480, margin=dict(l=60, r=20, t=70, b=50),
     )
-    return fig
+    return _apply_theme(fig)
 
 
 def snr_heatmap(snr_mat: np.ndarray, session: Session) -> go.Figure:
@@ -164,7 +178,7 @@ def snr_heatmap(snr_mat: np.ndarray, session: Session) -> go.Figure:
         yaxis_autorange="reversed",
         height=420, margin=dict(l=80, r=20, t=70, b=60),
     )
-    return fig
+    return _apply_theme(fig)
 
 
 def psd_per_channel(epochs: Epochs, session: Session,
@@ -199,7 +213,7 @@ def psd_per_channel(epochs: Epochs, session: Session,
         height=480, margin=dict(l=50, r=20, t=80, b=60),
         legend=dict(title="Class", orientation="h", y=-0.05),
     )
-    return fig
+    return _apply_theme(fig)
 
 
 def rest_vs_stimulus(session: Session, eeg_filt: np.ndarray,
@@ -252,7 +266,7 @@ def rest_vs_stimulus(session: Session, eeg_filt: np.ndarray,
         height=420, margin=dict(l=60, r=20, t=70, b=50),
         legend=dict(orientation="h", y=-0.15),
     )
-    return fig
+    return _apply_theme(fig)
 
 
 def snr_class_heatmap(epochs: Epochs, session: Session,
@@ -288,7 +302,7 @@ def snr_class_heatmap(epochs: Epochs, session: Session,
                    scaleanchor="x", constrain="domain"),
         height=420, margin=dict(l=80, r=20, t=70, b=60),
     )
-    return fig
+    return _apply_theme(fig)
 
 
 def cca_correlation_heatmap(scores: np.ndarray, labels: np.ndarray,
@@ -321,7 +335,7 @@ def cca_correlation_heatmap(scores: np.ndarray, labels: np.ndarray,
                    scaleanchor="x", constrain="domain"),
         height=420, margin=dict(l=80, r=20, t=70, b=60),
     )
-    return fig
+    return _apply_theme(fig)
 
 
 def time_frequency(session: Session, eeg_filt: np.ndarray,
@@ -366,7 +380,7 @@ def time_frequency(session: Session, eeg_filt: np.ndarray,
         yaxis_title="Frequency (Hz)",
         height=480, margin=dict(l=60, r=20, t=70, b=50),
     )
-    return fig
+    return _apply_theme(fig)
 
 
 def confusion(cm: np.ndarray, classes: list[int], session: Session,
@@ -389,16 +403,18 @@ def confusion(cm: np.ndarray, classes: list[int], session: Session,
                    scaleanchor="x", constrain="domain"),
         height=480, margin=dict(l=80, r=20, t=70, b=60),
     )
-    return fig
+    return _apply_theme(fig)
 
 
 # ----- Cross-session figures ----------------------------------------------
 
 def snr_comparison(snr_records: list[dict]) -> go.Figure:
     df = pd.DataFrame(snr_records)
-    df["who"] = df.apply(lambda r: f"S{r.subject} sess{r.session}", axis=1)
+    df["who"] = df.apply(lambda r: f"Sub {int(r.subject)} · sess {int(r.session)}", axis=1)
+    # Subject-session colours aligned to app palette
+    _SNR_PAL = ["#3f6fd8", "#7fa0e8", "#d95d39", "#e8997d"]  # S1s1,S1s2,S2s1,S2s2
     fig = px.bar(df, x="freq", y="snr", color="who", barmode="group",
-                 color_discrete_sequence=px.colors.qualitative.Set2,
+                 color_discrete_sequence=_SNR_PAL,
                  labels={"freq": "Stimulation frequency (Hz)",
                          "snr": "Mean occipital SNR",
                          "who": ""})
@@ -407,11 +423,12 @@ def snr_comparison(snr_records: list[dict]) -> go.Figure:
         xaxis=dict(type="category"),
         height=480, margin=dict(l=60, r=20, t=70, b=50),
     )
-    return fig
+    return _apply_theme(fig)
 
 
 def accuracy_curves(rows: list[dict]) -> go.Figure:
-    palette = px.colors.qualitative.Set1
+    # Two subjects × two sessions → blue shades / orange shades
+    palette = ["#3f6fd8", "#7fa0e8", "#d95d39", "#e8997d"]
     fig = go.Figure()
     for color, r in zip(palette, rows):
         ws = sorted(r["windows"].keys())
@@ -443,7 +460,7 @@ def accuracy_curves(rows: list[dict]) -> go.Figure:
         yaxis=dict(range=[0, 1.05], tickformat=".0%"),
         height=520, margin=dict(l=60, r=160, t=80, b=50),
     )
-    return fig
+    return _apply_theme(fig)
 
 
 def feature_space_3d(coords: np.ndarray, axis_labels: list[str],
@@ -469,7 +486,7 @@ def feature_space_3d(coords: np.ndarray, axis_labels: list[str],
         height=480, margin=dict(l=10, r=10, t=50, b=10),
         legend=dict(title="Class", orientation="h", y=-0.05),
     )
-    return fig
+    return _apply_theme(fig)
 
 
 def feature_space_3d_overlay(coords: np.ndarray, axis_labels: list[str],
@@ -502,39 +519,48 @@ def feature_space_3d_overlay(coords: np.ndarray, axis_labels: list[str],
         height=520, margin=dict(l=10, r=10, t=50, b=10),
         legend=dict(orientation="h", y=-0.05),
     )
-    return fig
+    return _apply_theme(fig)
 
 
 def confusion_grid(cms: list[dict]) -> go.Figure:
     classes = cms[0]["classes"]
+    # Short titles to prevent overlap — acc on second line via <br>
     titles = [
-        f"{item['label']} (acc {np.trace(item['cm']) / item['cm'].sum():.0%})"
+        f"{item['label']}<br><sup>acc {np.trace(item['cm']) / item['cm'].sum():.0%}</sup>"
         for item in cms
     ]
-    fig = make_subplots(rows=2, cols=2, subplot_titles=titles,
-                        horizontal_spacing=0.14, vertical_spacing=0.14,
-                        column_widths=[0.5, 0.5], row_heights=[0.5, 0.5])
+    fig = make_subplots(
+        rows=2, cols=2,
+        subplot_titles=titles,
+        horizontal_spacing=0.18,   # more room so titles don't bleed across
+        vertical_spacing=0.20,     # more room for the two-line titles
+        column_widths=[0.5, 0.5],
+        row_heights=[0.5, 0.5],
+    )
     for idx, item in enumerate(cms):
         r, c = idx // 2 + 1, idx % 2 + 1
         cm = item["cm"]
         cm_norm = cm / cm.sum(axis=1, keepdims=True).clip(min=1)
         fig.add_trace(go.Heatmap(
-            z=cm_norm, x=[str(cl) for cl in classes],
-            y=[str(cl) for cl in classes],
+            z=cm_norm, x=[f"{cl} Hz" for cl in classes],
+            y=[f"{cl} Hz" for cl in classes],
             text=cm, texttemplate="%{text:d}", textfont=dict(size=12),
             colorscale="Blues", zmin=0, zmax=1, showscale=(idx == 0),
-            colorbar=dict(title="Row-norm", len=0.45) if idx == 0 else None,
-            hovertemplate=f"{item['label']}<br>True %{{y}} Hz<br>"
-                          "Pred %{x} Hz<br>%{text:d} trials<extra></extra>",
+            colorbar=dict(title="Row-norm", len=0.42, y=0.78) if idx == 0 else None,
+            hovertemplate=f"{item['label']}<br>True %{{y}}<br>"
+                          "Pred %{x}<br>%{text:d} trials<extra></extra>",
         ), row=r, col=c)
-        xref = "x" if idx == 0 else f"x{idx + 1}"
-        fig.update_xaxes(title_text="Predicted (Hz)", constrain="domain",
-                         row=r, col=c)
-        fig.update_yaxes(title_text="True (Hz)", autorange="reversed",
-                         scaleanchor=xref, constrain="domain",
-                         row=r, col=c)
+        # Only label left column to avoid the diagonal-label bleed on right panels
+        fig.update_xaxes(title_text="Predicted", constrain="domain", row=r, col=c)
+        fig.update_yaxes(
+            title_text="True" if c == 1 else "",
+            autorange="reversed",
+            constrain="domain",
+            row=r, col=c,
+        )
     fig.update_layout(
         title="CCA confusion matrices — all subjects/sessions",
-        height=760, margin=dict(l=60, r=30, t=90, b=50),
+        height=800,
+        margin=dict(l=70, r=40, t=100, b=50),
     )
-    return fig
+    return _apply_theme(fig)
